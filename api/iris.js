@@ -15,20 +15,40 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+  
+  // Allow both GET and POST
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
 
   try {
-    // Get CNIC from request
-    let cnic = req.body.cnic || req.body.identifier || req.body.CNIC || '';
+    // Get CNIC from different sources
+    let cnic = '';
+    
+    // GET request: /api/iris/cnic=4220171565645
+    if (req.method === 'GET') {
+      // Extract CNIC from URL path
+      const path = req.url;
+      const match = path.match(/cnic[=:]([\d-]+)/i);
+      if (match) {
+        cnic = match[1];
+      }
+    }
+    
+    // POST request: body mein se
+    if (req.method === 'POST') {
+      cnic = req.body.cnic || req.body.identifier || req.body.CNIC || '';
+    }
     
     // Clean CNIC - Remove all non-numeric characters
     cnic = cnic.replace(/\D/g, '');
     
     if (!cnic || cnic.length !== 13) {
       return res.status(400).json({ 
+        success: false,
         error: 'Invalid CNIC', 
         message: 'CNIC must be 13 digits',
-        example: '4220171565645'
+        example: '/api/iris/cnic=4220171565645'
       });
     }
 
@@ -62,20 +82,17 @@ module.exports = async (req, res) => {
     res.status(200).json({
       success: true,
       cnic: cnic,
-      data: parsed,
-      raw: response.data
+      data: parsed
     });
 
   } catch (error) {
     console.error('Error:', error.message);
     
-    // Auto-renew session on token error
     if (error.response?.status === 401) {
       return res.status(401).json({
         success: false,
         error: 'Session Expired',
-        message: 'Token needs renewal',
-        auto_renew: false
+        message: 'Token needs renewal'
       });
     }
 
@@ -91,8 +108,6 @@ function parseHTML(html) {
   if (!html) return {};
 
   const result = {};
-  
-  // Pattern: <th>Label</th><td>Value</td>
   const regex = /<th[^>]*>(.*?)<\/th>\s*<td>(.*?)<\/td>/gi;
   let match;
 
@@ -103,4 +118,4 @@ function parseHTML(html) {
   }
 
   return result;
-}
+      }
